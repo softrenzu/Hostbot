@@ -1,118 +1,112 @@
 # Hostbot
 
-Hostbot is a source-available AI operations platform for hotels, vacation rentals, and other accommodation businesses.
+Hostbot is a source-available AI operations foundation for hotels, vacation rentals, and other accommodation businesses.
 
-It is designed around one rule: **the LLM is not the security boundary and is not the workflow authority**. Sensitive data access, reservation verification, incident transitions, ticket creation, and administrative actions are enforced by server-side policy and state machines.
+The core design principle is simple: **AI can interpret a guest request, but server-side code owns authorization and workflow state.**
 
-## What is included
+## v0.1.0 MVP
 
-- Guest AI chat API with optional OpenAI-compatible LLM support
-- Structured property data first; LLM/RAG can be layered on top
-- Reservation confirmation and signed short-lived stay tokens
-- Public/private property data separation enforced on the server
-- Internet incident state machine enforced in code
-- Support ticket lifecycle and admin status updates
-- Audit log for security-sensitive actions
-- Multi-tenant data model: organization -> property -> reservation
-- Connector interfaces for PMS, smart locks, messaging, and maintenance systems
-- Docker configuration and automated tests
+The current version includes:
+
+- FastAPI guest API
+- reservation confirmation flow
+- short-lived random stay tokens scoped to a property
+- public property information
+- verified guest support workflows
+- deterministic internet-incident state machine
+- support ticket creation after troubleshooting steps
+- in-memory audit events
+- automated workflow tests
+
+The current MVP intentionally keeps persistence and external integrations simple so the security and workflow model can be reviewed first.
 
 ## Architecture
 
 ```text
-Guest / OTA / App
-      |
-      v
-   Hostbot API
-      |
-      +--> Reservation verification --> signed stay token
-      |
-      +--> Policy engine -------------> allow / deny / approval
-      |
-      +--> Incident state machine ----> deterministic workflow
-      |
-      +--> Structured property data --> public / private split
-      |
-      +--> Optional LLM --------------> wording and public Q&A only
-      |
-      +--> Tickets / Audit log
-      |
-      +--> Connectors
-            +-- PMS
-            +-- Smart lock
-            +-- Messaging
-            +-- Maintenance
+Guest / App
+    |
+    v
+ FastAPI
+    |
+    +--> Reservation verification
+    |        |
+    |        +--> short-lived stay token
+    |
+    +--> HostbotService
+             |
+             +--> server-side policy
+             +--> incident state machine
+             +--> support ticket
+             +--> audit events
+             +--> public property context
 ```
 
-## Security model
-
-Hostbot intentionally does **not** rely on prompts such as "never reveal the door code" as the final protection. The private-property endpoint requires a valid stay token and validates that the token belongs to the requested property. Incident transitions are also checked server-side.
-
-By default, private property data is not sent to the LLM. The optional LLM receives public property context only.
+The LLM is not the final security boundary. Future LLM and RAG layers are intended to sit above the same policy and workflow services rather than directly controlling sensitive operations.
 
 ## Quick start
 
 ```bash
-cp .env.example .env
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e .[dev]
 uvicorn app.main:app --reload
 ```
 
 Open `http://127.0.0.1:8000/docs`.
 
-A demo property and reservation are created automatically for local development:
+Demo data is included for local evaluation:
 
 - Property ID: `demo-tokyo`
-- Demo confirmation code: `HBDEMO2026`
+- Confirmation code: `HBDEMO2026`
 
-The demo credentials are for local evaluation only.
+## Example workflow
 
-## Example flow
+1. Call `POST /v1/stays/verify` with the demo property and confirmation code.
+2. Send the returned `stay_token` to `POST /v1/chat`.
+3. Report an internet problem.
+4. The first verified request moves the incident to `wifi_shared`.
+5. A second follow-up moves it to `troubleshooting`.
+6. A third follow-up creates a support ticket and moves it to `ticket_created`.
 
-1. Verify a stay:
+The guest cannot skip directly from a new incident to ticket creation because the transition order is enforced in code.
+
+## Tests
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/stays/verify \\
-  -H 'Content-Type: application/json' \\
-  -d '{"property_id":"demo-tokyo","confirmation_code":"HBDEMO2026"}'
+pytest
 ```
 
-2. Send the returned `stay_token` to `/v1/chat`.
-3. Ask about Wi-Fi. The first internet request returns Wi-Fi credentials, the next returns troubleshooting, and the next creates a support ticket. The order is enforced in code.
+The included tests check that a verified guest reaches ticket creation in the required order and that an unverified guest cannot start the support workflow.
 
-## Production roadmap
+## Planned next modules
 
-The current repository is an MVP foundation. Recommended production modules are:
-
-- OTA/PMS connectors for Airbnb, Booking.com, Expedia, Beds24, AirHost, Guesty, Hostaway, Cloudbeds and Mews
-- Redis/NATS/Kafka event bus for horizontally scaled real-time workflows
-- PostgreSQL row-level tenant isolation
-- KMS/Vault-backed encryption for property secrets
-- SSO/OIDC and role-based administration
-- Human approval queue for high-risk actions such as unlocking doors or issuing refunds
-- RAG for house manuals and long-form property documents
-- Model routing, evaluation, cost controls and fallback models
-- LINE, WhatsApp, email and SMS messaging connectors
-- Cleaning assignment, maintenance dispatch, review assistance and revenue optimization
+- PostgreSQL persistence and tenant isolation
+- encrypted property-secret vault integration
+- OpenAI-compatible model adapter and model routing
+- RAG for house manuals and property documents
+- PMS/OTA connectors for Airbnb, Booking.com, Expedia, Beds24, AirHost, Guesty, Hostaway, Cloudbeds and Mews
+- LINE, WhatsApp, email and SMS messaging
+- operations dashboard and ticket status management
+- cleaning assignment and maintenance dispatch
+- human approval for higher-risk actions
+- revenue and review optimization agents
+- event bus for horizontally scaled deployments
+- enterprise SSO, RBAC and richer audit trails
 
 ## License and commercial use
 
 **Hostbot is source-available software. It is not OSI-approved open source.**
 
-Non-commercial personal, educational, research, and evaluation use is permitted under the included `LICENSE`.
+Personal, educational, research and non-commercial evaluation use is permitted under the included `LICENSE`.
 
-**Business use and commercial use require a paid commercial license from ROOOMTECH株式会社.** This includes production use by a company, use in paid services, use for customer operations, resale, SaaS delivery, and use on behalf of a commercial organization.
+**Business use, corporate use and commercial use require a paid commercial license from ROOOMTECH株式会社.** This includes production use by a company, accommodation operations, customer-facing services, paid consulting, resale, SaaS and managed-service use.
 
-ROOOMTECH株式会社 also offers implementation, maintenance, support, customization, and commercial license agreements. Please contact ROOOMTECH株式会社 if you want to use Hostbot for business.
-
-See `LICENSE` and `COMMERCIAL_LICENSE.md` for details.
+ROOOMTECH株式会社 provides separate commercial license agreements as well as implementation, customization, maintenance and support. Contact ROOOMTECH株式会社 before using Hostbot for business.
 
 ## 日本語
 
-Hostbotは宿泊施設向けのAI運用基盤です。AIへの指示だけに依存せず、予約確認、機密情報の参照、インシデント遷移、チケット処理をサーバー側で強制します。
+Hostbotは宿泊施設向けのAI運用基盤です。現在のv0.1.0では、予約確認、短期stay token、宿泊者サポート、インターネット障害の状態管理、チケット生成までを実装しています。
 
-**個人利用、教育、研究、非商用評価は無償です。法人利用、業務利用、商用利用は有償ライセンス契約が必要です。**
+**個人利用、教育、研究、非商用評価は無償です。法人利用、業務利用、商用利用にはROOOMTECH株式会社との有償商用ライセンス契約が必要です。**
 
-ROOOMTECH株式会社では、商用ライセンス契約、導入支援、カスタマイズ、保守、サポートを提供します。ビジネスで利用する場合はROOOMTECH株式会社へご連絡ください。
+ROOOMTECH株式会社では、商用ライセンス契約書、導入支援、カスタマイズ、保守、運用サポートを提供します。ビジネスで利用する場合はROOOMTECH株式会社へお問い合わせください。
