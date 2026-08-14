@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 from dataclasses import asdict
 from typing import Iterable
-from .domain import AuditEvent, Incident, KnowledgeDocument, OperationJob, Organization, Property, Reservation, Ticket
+
+from .domain import AuditEvent, Incident, JobType, KnowledgeDocument, OperationJob, Organization, Property, Reservation, Ticket
 
 
 class MemoryRepository:
@@ -34,11 +36,17 @@ class MemoryRepository:
     def find_reservation(self, property_id: str, confirmation_code: str):
         return next((r for r in self.reservations.values() if r.property_id == property_id and r.confirmation_code == confirmation_code), None)
 
+    def find_reservation_by_external(self, organization_id: str, channel: str, external_id: str):
+        return next((r for r in self.reservations.values() if r.organization_id == organization_id and r.channel == channel and r.external_id == external_id), None)
+
     def active_incident(self, reservation_id: str, category: str):
         return next((i for i in self.incidents.values() if i.reservation_id == reservation_id and i.category == category and i.state.value != "resolved"), None)
 
     def ticket_for_incident(self, incident_id: str):
         return next((t for t in self.tickets.values() if t.incident_id == incident_id), None)
+
+    def job_for_reservation(self, reservation_id: str, job_type: JobType):
+        return next((j for j in self.jobs.values() if j.reservation_id == reservation_id and j.type == job_type), None)
 
     def list_documents(self, organization_id: str, property_id: str | None = None) -> Iterable[KnowledgeDocument]:
         return [d for d in self.documents.values() if d.organization_id == organization_id and (d.property_id is None or property_id is None or d.property_id == property_id)]
