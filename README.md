@@ -2,27 +2,32 @@
 
 Hostbot is a source-available AI operations platform for hotels, vacation rentals, and other accommodation businesses.
 
-The core design rule is that the LLM is **not** the security boundary or workflow authority. Reservation verification, private-data access, tenant isolation, incident transitions, tickets, cleaning jobs, and maintenance jobs are enforced by application code.
+The core rule is that the LLM is **not** the security boundary or workflow authority. Reservation verification, private-data access, tenant isolation, incident transitions, ticket creation, cleaning/maintenance jobs, and administrative actions are enforced by application code.
 
 ## Implemented in v0.2.0
 
-- FastAPI guest and admin API
+- FastAPI guest API and admin API
+- Browser-based `/admin` operations dashboard for tickets, cleaning/maintenance jobs, and audit events
+- Optional admin API token enforcement with `HOSTBOT_ADMIN_TOKEN`
 - Organization -> property -> reservation multi-tenant model
 - Signed, short-lived, property-scoped stay tokens
 - Public/private property data separation
 - Deterministic internet incident state machine
-- Support tickets plus automatic maintenance-job creation
-- Cleaning and maintenance job model/status API
-- Audit log
+- Automatic support ticket and maintenance-job creation after troubleshooting fails
+- Cleaning-job auto-scheduling from imported reservation check-out times
+- External reservation de-duplication by organization + channel + external reservation ID
+- Audit log for sensitive and operational actions
 - PostgreSQL persistence through SQLAlchemy, with in-memory mode for development/tests
-- RAG retrieval for house manuals and property knowledge
-- Model router with fallback providers and OpenAI-compatible HTTP provider
+- Property-scoped RAG retrieval for house manuals and knowledge documents
+- Model router with automatic fallback
+- OpenAI-compatible LLM provider wired through environment variables
 - Beds24 API v2 connector
 - Booking.com Connectivity token authentication and request adapter
 - AirHost configurable API adapter for contracted API endpoints
 - Airbnb configurable partner adapter for approved API-program endpoints
 - LINE Messaging API push connector
 - WhatsApp Cloud API text connector
+- Normalized single/bulk reservation import API for PMS/channel data
 
 ## Run locally
 
@@ -34,16 +39,29 @@ pytest -q
 uvicorn app.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000/docs`.
+Open:
+
+- API docs: `http://127.0.0.1:8000/docs`
+- Admin dashboard: `http://127.0.0.1:8000/admin`
 
 For PostgreSQL, set `HOSTBOT_REPOSITORY=postgres`, set `DATABASE_URL` to your PostgreSQL SQLAlchemy URL, set a strong `HOSTBOT_TOKEN_SECRET`, then start the API normally.
+
+For a protected admin API, set `HOSTBOT_ADMIN_TOKEN`. The dashboard lets the operator enter this token locally in the browser when loading operational data.
+
+For an OpenAI-compatible LLM endpoint, set `HOSTBOT_LLM_BASE_URL`, `HOSTBOT_LLM_API_KEY`, `HOSTBOT_LLM_MODEL`, and optionally `HOSTBOT_LLM_PROVIDER_NAME`. If the configured model endpoint fails, Hostbot falls back to its deterministic rule provider rather than failing the entire guest workflow.
 
 Demo data:
 
 - property: `demo-tokyo`
 - confirmation code: `HBDEMO2026`
 
-Do not use demo credentials in production.
+Do not use demo credentials or default development secrets in production.
+
+## Reservation and cleaning automation
+
+`POST /v1/admin/reservations` and `POST /v1/admin/reservations/import` normalize PMS/channel reservations into Hostbot. When a reservation includes `check_out`, Hostbot creates one queued cleaning job containing the scheduled check-out time. Re-importing the same `channel + external_id` updates the same local reservation and does not duplicate the cleaning job.
+
+The external provider connector retrieves provider data; the normalization/import layer is deliberately separate because each commercial account can expose different fields, scopes, and enabled APIs.
 
 ## External integrations
 
@@ -54,13 +72,13 @@ Booking.com integration requires Connectivity Partner credentials/scopes. Airbnb
 ## Production hardening still recommended
 
 - secret storage in KMS/Vault rather than database JSON
-- SSO/OIDC and RBAC for the admin API
+- OIDC/SSO and fine-grained RBAC beyond the current admin-token gate
 - encrypted PII fields and retention policies
-- background workers/event bus for dispatch and retries
+- background workers/event bus for dispatch, retries, and scheduled execution
 - webhook signature validation for each provider
-- human approval UI for refunds, cancellations, and smart-lock actions
+- human approval for refunds, cancellations, payments, and smart-lock actions
 - database migrations and backup/restore automation
-- evaluation/observability for LLM responses
+- LLM evaluation, tracing, cost controls, and prompt/version management
 
 ## License and commercial use
 
@@ -74,6 +92,8 @@ ROOOMTECH株式会社 offers commercial license agreements, implementation, cust
 
 ## 日本語
 
-Hostbotは宿泊施設向けAI運用基盤です。予約確認、物件ごとの機密情報制御、RAG、障害対応、チケット、清掃・保守ジョブ、外部PMS・メッセージ連携を一つの基盤で扱います。
+Hostbotは宿泊施設向けAI運用基盤です。予約確認、物件ごとの機密情報制御、RAG、障害対応、チケット、清掃・保守ジョブ、PMS/OTA・メッセージ連携、管理画面を一つの基盤で扱います。
+
+予約取り込み時にチェックアウト時刻があれば清掃ジョブを自動生成し、同一外部予約の再取り込みでは重複を防止します。LLMは環境変数でOpenAI互換APIへ接続でき、障害時はルールベース処理へフォールバックします。
 
 **個人利用、教育、研究、非商用評価は無償です。法人利用、業務利用、本番利用、SaaS提供、再販売を含む商用利用はROOOMTECH株式会社との有償商用ライセンス契約が必要です。**
