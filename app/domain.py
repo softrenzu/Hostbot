@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -57,6 +58,8 @@ class Reservation:
     guest_contact: str = ""
     channel: str = "direct"
     external_id: str | None = None
+    check_in: str | None = None
+    check_out: str | None = None
 
 
 @dataclass
